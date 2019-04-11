@@ -8,11 +8,7 @@
 #include "matrix_index.h"
 #include "types.h"
 #include "util_types.h"
-
-extern "C" void dgemm_(const char* transa, const char* transb, const int* m, const int* n,
-                       const int* k, const double* alpha, const double* a, const int* lda,
-                       const double* b, const int* ldb, const double* beta, double* c,
-                       const int* ldc);
+#include <chrono>
 
 using namespace dla_interface;
 
@@ -102,14 +98,16 @@ int main(int argc, char** argv) {
   std::uniform_real_distribution<double> dist(-1, 1);
   auto random = [&dist, &rng]() { return dist(rng); };
 
-  double alpha = dist(rng);
-  double beta = dist(rng);
+  double alpha = 1.0;
+  double beta = 0.0;
 
   DistributedMatrix<double> mat_a(a_m, a_n, a_mb, a_nb, comm_grid, scalapack_dist);
   DistributedMatrix<double> mat_b(b_m, b_n, b_mb, b_nb, comm_grid, scalapack_dist);
 
   fill_random(mat_a, random);
   fill_random(mat_b, random);
+
+  std::vector<long long> times;
 
   for (auto solver : solvers) {
     double min_elapsed = 3e9;  // ~100 years
@@ -119,16 +117,30 @@ int main(int argc, char** argv) {
 
       fill_random(mat_c, random);
 
-      util::Timer<> timer(comm_grid.rowOrderedMPICommunicator());
+      // util::Timer<> timer(comm_grid.rowOrderedMPICommunicator());
+
+      MPI_Barrier(MPI_COMM_WORLD);
+      auto start = std::chrono::steady_clock::now();
 
       matrixMultiplication(transa, transb, alpha, mat_a, mat_b, beta, mat_c, solver, 2);
-      auto elapsed = timer.elapsed(0, timer.save_time());
-      min_elapsed = std::min(min_elapsed, elapsed);
+
+      MPI_Barrier(MPI_COMM_WORLD);
+      auto end = std::chrono::steady_clock::now();
+
+      auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(end - start).count();
+
+      times.push_back(elapsed);
+      // auto elapsed = timer.elapsed(0, timer.save_time());
+      // min_elapsed = std::min(min_elapsed, elapsed);
     }
+
     if (comm_grid.id2D() == std::make_pair(0, 0)) {
       double mnk = static_cast<double>(m) * static_cast<double>(n) * static_cast<double>(k);
-      std::cout << util::getSolverString(solver) << ": Best " << min_elapsed << " s ,"
-                << util::nrOps<double>(mnk, mnk) / min_elapsed / 1e9 << " GFlop/s" << std::endl;
+      std::cout << "ScaLAPACK TIMES [ms] = ";
+      for (int i = 0; i < rep; ++i) {
+        std::cout << times[i] << " ";
+      }
+      std::cout << std::endl;
     }
   }
 
