@@ -103,9 +103,7 @@ int main(int argc, char** argv) {
 
   DistributedMatrix<double> mat_a(a_m, a_n, a_mb, a_nb, comm_grid, scalapack_dist);
   DistributedMatrix<double> mat_b(b_m, b_n, b_mb, b_nb, comm_grid, scalapack_dist);
-
-  fill_random(mat_a, random);
-  fill_random(mat_b, random);
+  DistributedMatrix<double> mat_c(m, n, c_mb, c_nb, comm_grid, scalapack_dist);
 
   std::vector<long long> times;
 
@@ -113,8 +111,8 @@ int main(int argc, char** argv) {
     double min_elapsed = 3e9;  // ~100 years
 
     for (int id_rep = 0; id_rep < rep; ++id_rep) {
-      DistributedMatrix<double> mat_c(m, n, c_mb, c_nb, comm_grid, scalapack_dist);
-
+      fill_random(mat_a, random);
+      fill_random(mat_b, random);
       fill_random(mat_c, random);
 
       // util::Timer<> timer(comm_grid.rowOrderedMPICommunicator());
